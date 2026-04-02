@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crane Fleet Dashboard Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #0061ff; --danger: #ff4d4d; --bg: #f4f7fa; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg); margin: 0; padding: 15px; }
+        
+        /* Sticky Header for Search */
+        .header { 
+            text-align: center; 
+            margin-bottom: 25px; 
+            position: sticky; 
+            top: 0; 
+            background: var(--bg); 
+            padding: 10px 0; 
+            z-index: 1000;
+        }
+
+        /* Professional Search Bar Styling */
+        .search-wrapper {
+            max-width: 500px;
+            margin: 15px auto;
+            position: relative;
+        }
+        .search-input {
+            width: 100%;
+            padding: 12px 45px;
+            border-radius: 30px;
+            border: 2px solid #ddd;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .search-input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(0,97,255,0.2);
+        }
+        .search-icon {
+            position: absolute;
+            left: 18px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #64748b;
+        }
+
+        .counter { background: white; padding: 8px 20px; border-radius: 50px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); font-weight: bold; color: var(--primary); display: inline-block; margin-top: 10px; }
+        
+        .container { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; max-width: 1450px; margin: 0 auto; }
+        .card { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.08); border-top: 5px solid var(--primary); transition: 0.3s; }
+        .card-header { background: #f8fafc; padding: 12px 15px; font-weight: 800; font-size: 1.1rem; border-bottom: 1px solid #eee; color: #1e293b; }
+        .card-body { padding: 15px; }
+        .info-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.82rem; border-bottom: 1px solid #fcfcfc; padding-bottom: 4px; }
+        .label { color: #64748b; font-weight: 500; text-transform: uppercase; font-size: 0.7rem; flex-shrink: 0; }
+        .value { font-weight: 600; color: #0f172a; text-align: right; white-space: nowrap; margin-left: 10px; }
+        .expired { color: var(--danger) !important; font-weight: 800; background: #fff1f2; padding: 2px 4px; border-radius: 3px; }
+        
+        #loading { text-align: center; margin-top: 100px; font-size: 1.2rem; font-weight: bold; color: #94a3b8; }
+        #no-results { text-align: center; display: none; padding: 50px; color: #64748b; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1 style="margin:0; color: #1e293b;">🏗️ CRAN-FLEET Dashboard</h1>
+        
+        <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchInput" class="search-input" placeholder="Search Vehicle Number (e.g. GJ 16)..." onkeyup="filterCards()">
+        </div>
+
+        <div class="counter" id="totalVehicles">Total Vehicles: Loading...</div>
+    </div>
+
+    <div id="loading">Connecting to Smart API...</div>
+    <div id="no-results">❌ No matching vehicles found.</div>
+    <div class="container" id="card-container"></div>
+
+    <script>
+        const apiURL = 'https://script.google.com/macros/s/AKfycby3M69HaTJ4MoDdOqfn3HFnSBvbxTdSh1yohD1Oki0vrYwkYcWG75tSjekuIoDjua-gaA/exec';
+
+        async function initDashboard() {
+            try {
+                const response = await fetch(apiURL);
+                const data = await response.json();
+                const container = document.getElementById('card-container');
+                const loader = document.getElementById('loading');
+                const counter = document.getElementById('totalVehicles');
+
+                if (data.length === 0) { loader.innerText = "No data found."; return; }
+
+                loader.style.display = 'none';
+                counter.innerText = `Total Vehicles: ${data.length}`;
+                const headings = Object.keys(data[0]);
+
+                data.forEach(item => {
+                    let cardContent = '';
+                    let isCardExpired = false;
+                    const today = new Date();
+
+                    headings.forEach(key => {
+                        const cleanKey = key.trim().toUpperCase();
+                        if(cleanKey.includes("SR. NO") || cleanKey === "") return;
+
+                        let val = item[key] || "—";
+                        let extraClass = "";
+
+                        const isRegistration = cleanKey.includes("REGISTR"); 
+                        const isExpiryCheck = ["EXP", "VALID", "FITNESS", "INSURANCE", "PERMIT", "PUC", "FORM-10"].some(k => cleanKey.includes(k));
+
+                        if (isExpiryCheck && !isRegistration && val !== "—") {
+                            const d = new Date(val);
+                            if (!isNaN(d.getTime())) {
+                                if (d < today) {
+                                    extraClass = "expired";
+                                    isCardExpired = true;
+                                }
+                                val = d.toLocaleDateString('en-GB'); 
+                            }
+                        } else if (val !== "—") {
+                            const d = new Date(val);
+                            if (!isNaN(d.getTime()) && val.toString().length > 8) {
+                                val = d.toLocaleDateString('en-GB');
+                            }
+                        }
+
+                        if (cleanKey === "REGN NO") return;
+
+                        cardContent += `
+                            <div class="info-row">
+                                <span class="label">${key}:</span>
+                                <span class="value ${extraClass}">${val}</span>
+                            </div>`;
+                    });
+
+                    const regNo = (item["REGN NO"] || "Unknown").toString();
+                    
+                    // Har card ko ek data-attribute de rahe hain search ke liye
+                    container.innerHTML += `
+                        <div class="card" data-regno="${regNo.toUpperCase()}" style="border-top-color: ${isCardExpired ? 'var(--danger)' : 'var(--primary)'}">
+                            <div class="card-header">${regNo}</div>
+                            <div class="card-body">${cardContent}</div>
+                        </div>`;
+                });
+            } catch (error) {
+                document.getElementById('loading').innerText = "❌ Connection Error.";
+            }
+        }
+
+        // Live Search Logic
+        function filterCards() {
+            const input = document.getElementById('searchInput').value.toUpperCase();
+            const cards = document.getElementsByClassName('card');
+            const noResults = document.getElementById('no-results');
+            const counter = document.getElementById('totalVehicles');
+            let visibleCount = 0;
+
+            for (let i = 0; i < cards.length; i++) {
+                const regNo = cards[i].getAttribute('data-regno');
+                if (regNo.includes(input)) {
+                    cards[i].style.display = "";
+                    visibleCount++;
+                } else {
+                    cards[i].style.display = "none";
+                }
+            }
+
+            // Update counter during search
+            counter.innerText = `Showing: ${visibleCount} Vehicles`;
+            
+            // Show/Hide no results message
+            noResults.style.display = (visibleCount === 0) ? "block" : "none";
+        }
+
+        initDashboard();
+    </script>
+</body>
+</html>
